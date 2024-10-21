@@ -1,0 +1,9 @@
+SUB R0, R15, R15
+ADD R7, R0, #0
+LDR R4, [R7, #0x0]
+STR R4, [R0, #0x800]
+ADD R3, R0, #0xbe0000
+SUBS R3, R3, #0x1
+BNE #0x16
+ADD R7, R7, #4
+B #0
