@@ -1,0 +1,30 @@
+sub r0, r15, r15
+add r5, r5, #4
+add r1, r0, #7
+add r2, r0, #4
+ldr r3, [r2]
+str r3, [r0, #0x800]
+ldr r4, [r0, #0xfc]
+subs r4, r4, #1
+bne #0x1c
+add r2, r2, #4
+subs r1, r1, #1
+bne #0x10
+sub r2, r15, r15
+subs r5, r5, #1
+bne #0x8
+add r5, r5, #8
+add r1, r0, #7
+add r2, r0, #4
+ldr r3, [r2]
+str r3, [r0, #0x800]
+ldr r4, [r0, #0xf8]
+subs r4, r4, #1
+bne #0x54
+add r2, r2, #4
+subs r1, r1, #1
+bne #0x48
+sub r2, r15, r15
+subs r5, r5, #1
+bne #0x40
+b #0

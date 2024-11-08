@@ -1,0 +1,108 @@
+// Inicialización principal
+ADD R1, R0, #0x80    // R1 = 0x80 (valor inicial)
+ADD R2, R0, #0      // R2 = 0 (contador)
+ADD R3, R0, #0x800  // R3 = dirección base + 0x800
+ADD R5, R0, #0x800  // R5 = dirección para velocidad
+
+main_loop:
+    // Fase 1: Patrón 80 00
+    ADD R2, R0, #0      // Reset contador
+loop1:
+    STR R1, [R0, R3]    // Guardar 0x80
+    B check_reset   // Verificar reset
+    B check_buttons // Verificar botones
+    B delay         // Llamar delay
+    STR R0, [R0, R3]// Guardar 0x00
+    B check_reset   // Verificar reset
+    B check_buttons // Verificar botones
+    B delay         // Llamar delay
+    ADD R2, R2, #1  // Incrementar contador
+    SUBS R4, R2, #6 // Comprobar 6 iteraciones
+    BNE loop1
+
+    // Fase 2: Secuencia ascendente
+    ADD R2, R0, #0x40   // R2 = 0x40
+loop2:
+    ADD R1, R1, R2  // Sumar al patrón
+    STR R1, [R0, R3]    // Guardar patrón
+    B check_reset   // Verificar reset
+    B check_buttons // Verificar botones
+    B delay         // Llamar delay
+    ADD R2, R2, R2  // Multiplicar por 2
+    SUBS R4, R2, #0x100
+    BNE loop2
+	B check_reset   // Verificar reset
+    B check_buttons // Verificar botones
+    B delay         // Llamar delay
+	
+    // Fase 3: Secuencia descendente
+    ADD R2, R0, #0x7F   // R2 = 0x7F
+loop3:
+    AND R1, R1, R2  // Aplicar máscara
+    STR R1, [R0, R3]    // Guardar resultado
+    B check_reset   // Verificar reset
+    B check_buttons // Verificar botones
+    B delay         // Llamar delay
+    ADD R2, R2, R2  // Multiplicar por 2
+    SUBS R4, R1, #0
+    BNE loop3
+    B main_loop     // Volver al inicio
+
+// Módulo de BOTONES 
+check_buttons:
+    LDR R9, [R0, #0x800]     // Primera lectura del botón
+    ANDS R8, R9, #0x10       // Verificar si botón presionado
+    BEQ return_main          // Si no está presionado, volver
+
+    // Primer botón detectado, esperar delay
+    B delay                  // Esperar un tiempo
+
+    // Segunda verificación
+    LDR R9, [R0, #0x800]     // Segunda lectura del botón
+    ANDS R8, R9, #0x10       // Verificar si sigue presionado
+    BNE adjust_speed         // Si sigue presionado, ajustar velocidad
+    
+    // Si llegamos aquí, fue una presión corta
+    B main_menu              // Ir al menú principal
+
+adjust_speed:
+    ANDS R8, R9, #0x8        // Verificar dirección (arriba/abajo)
+    LDR R8, [R5, #0x80]      // Cargar velocidad actual
+    BNE speed_up             // Si es 1, aumentar velocidad
+    
+speed_down:
+    SUB R8, R8, R7           // Decrementar velocidad
+    STR R8, [R5, #0x80]      // Guardar nueva velocidad
+    B R14                    // Retornar
+
+speed_up:
+    ADD R8, R8, R7           // Incrementar velocidad
+    STR R8, [R5, #0x80]      // Guardar nueva velocidad
+    B R14                    // Retornar
+
+return_main:
+    B R14                    // Retornar si no hubo presión de botón
+    
+// Módulo de DELAY
+delay:
+    LDR R8, [R5, #0x80]   // Cargar velocidad
+delay_loop:
+    SUBS R8, R8, #1
+    BNE delay_loop
+    B R14                 // Retornar
+
+// Módulo de RESET
+check_reset:
+    LDR R9, [R0, #0x800]  // Leer entrada
+    ANDS R8, R9, #0x00    // Verificar reset
+    BEQ main_loop         // Si reset, volver al inicio de todo
+    B R14                 // Retornar
+
+// Módulo de DIVISIÓN
+division:
+    SUBS R6, R6, #2
+    ADD R7, R7, #1
+    BNE division
+    ADD R6, R0, R7
+    B R14
+

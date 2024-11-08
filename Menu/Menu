@@ -1,0 +1,351 @@
+// Definiciones de direcciones y máscaras como comentarios para referencia
+// LED_BASE    = 0x800
+// BTN_MASK    = 0x10
+// SW_MASK     = 0x0F
+// PSW_VALUE   = 0x0C
+// DELAY_ADDR  = 0xFC
+// SPEED_ADDR  = 0xF8
+
+// Inicio del sistema
+start:
+    SUB R0, R15, R15          // Limpia R0
+    ADD R1, R0, #0x80         // Valor inicial de LEDs
+    ADD R2, R0, #0            // Inicializa contador
+    ADD R3, R0, #0x800        // Base de LEDs
+    ADD R5, R0, #0xF8         // Dirección de velocidad
+    ADD R12, R0, #4           // Configuración para retornos
+
+// Sistema de contraseña mejorado
+check_password:
+    LDR R9, [R0, #0x800]      // Lee switches
+    AND R7, R9, #0xF          // Máscara para switches
+    ADD R1, R0, #0xC          // Valor de contraseña
+    SUBS R8, R1, R7           // Compara
+    BEQ menu_start            // Si correcto, va al menú
+    
+    // Manejo de error de contraseña
+    ADD R3, R0, #0x40         // LED de error
+    STR R3, [R0, #0x800]      // Muestra error
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    STR R0, [R0, #0x800]      // Apaga LED
+    B start                   // Vuelve al inicio
+
+// Menú principal mejorado
+menu_start:
+    ADD R4, R0, #1            // Inicializa opción de menú
+    LDR R2, [R0, #0xF8]       // Carga velocidad
+
+menu_loop:
+    STR R4, [R0, #0x800]      // Muestra opción actual
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    
+    LDR R9, [R0, #0x800]      // Lee botones
+    ANDS R8, R9, #0x10        // Verifica botón
+    BEQ menu_next             // Si no presionado, siguiente
+    
+    // Selección de opción
+    SUBS R5, R4, #1           // Comprueba opción 1
+    BEQ auto_fantastic        // Auto Fantástico
+    SUBS R5, R4, #2           // Comprueba opción 2
+    BEQ pattern_choque        // Patrón de Choque
+    SUBS R5, R4, #4           // Comprueba opción 3
+    BEQ pattern_corazon       // Patrón Corazón
+    B menu_start              // Si no válido, reinicia menú
+
+menu_next:
+    ADD R4, R4, R4            // Siguiente opción
+    SUBS R8, R4, #32          // Límite de opciones
+    BEQ menu_start            // Si llegó al límite, reinicia
+    B menu_loop               // Siguiente iteración
+
+// Auto Fantástico mejorado
+auto_fantastic:
+    ADD R6, R0, #0x80         // Patrón inicial
+    ADD R7, R0, #8            // Contador
+
+auto_right:
+    STR R6, [R0, #0x800]      // Muestra patrón
+    ADD R14, R12, R15         // Guarda retorno
+    B check_reset             // Verifica reset
+    ADD R14, R12, R15         // Guarda retorno
+    B check_speed             // Verifica velocidad
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    
+    ADD R14, R12, R15         // Guarda retorno
+    B division                // Divide R6 por 2
+    SUBS R7, R7, #1           // Decrementa contador
+    BNE auto_right            // Si no terminó, continúa
+    
+    ADD R6, R0, #1            // Reinicia patrón
+    ADD R7, R0, #8            // Reinicia contador
+
+auto_left:
+    STR R6, [R0, #0x800]      // Muestra patrón
+    ADD R14, R12, R15         // Guarda retorno
+    B check_reset             // Verifica reset
+    ADD R14, R12, R15         // Guarda retorno
+    B check_speed             // Verifica velocidad
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    
+    ADD R6, R6, R6            // Multiplica por 2
+    SUBS R7, R7, #1           // Decrementa contador
+    BNE auto_left             // Si no terminó, continúa
+    B auto_fantastic          // Vuelve al inicio
+
+// Control de velocidad mejorado con doble comprobación
+check_speed:
+    LDR R9, [R0, #0x800]      // Primera lectura de botones
+    ANDS R8, R9, #0x10        // Verifica botón
+    BEQ return_speed          // Si no presionado, retorna
+    
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera para anti-rebote
+    
+    LDR R9, [R0, #0x800]      // Segunda lectura de botones
+    ANDS R8, R9, #0x10        // Verifica si sigue presionado
+    BNE check_long_press      // Si sigue presionado, verifica presión larga
+    B main_menu               // Si fue presión corta, vuelve al menú
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+
+check_long_press:
+    ANDS R8, R9, #0x8         // Verifica dirección (arriba/abajo)
+    LDR R8, [R5, #0x80]       // Carga velocidad actual
+    BNE speed_up              // Si es 1, aumenta velocidad
+    
+speed_down:
+    SUBS R8, R8, #1           // Disminuye velocidad
+    BEQ return_speed          // Si llegó a 0, no reduce más
+    STR R8, [R5, #0x80]       // Guarda nueva velocidad
+    B return_speed
+    
+speed_up:
+    ADD R8, R8, #1            // Aumenta velocidad
+    STR R8, [R5, #0x80]       // Guarda nueva velocidad
+    
+return_speed:
+    ADD R15, R0, R14          // Retorna
+
+// Módulo de delay para anti-rebote
+delay:
+    LDR R8, [R5, #0x80]       // Carga valor de velocidad
+delay_loop:
+    SUBS R8, R8, #1           // Decrementa contador
+    BNE delay_loop            // Si no es cero, continúa
+    ADD R15, R0, R14          // Retorna
+
+// Rutina de división mejorada
+division:
+    SUBS R6, R6, #2           // Resta 2
+    ADD R7, R7, #1            // Incrementa contador
+    BNE division              // Si no es 0, continúa
+    ADD R6, R0, R7            // Resultado en R6
+    ADD R15, R0, R14          // Retorna
+
+
+------------------------------------------------------------------------------------------------
+// Definiciones de direcciones y máscaras como comentarios para referencia
+// LED_BASE    = 0x800
+// BTN_MASK    = 0x10
+// SW_MASK     = 0x0F
+// PSW_VALUE   = 0x0C
+// DELAY_ADDR  = 0xFC
+// SPEED_ADDR  = 0xF8
+
+// Inicio del sistema
+start:
+    SUB R0, R15, R15          // Limpia R0
+    ADD R1, R0, #0x80         // Valor inicial de LEDs
+    ADD R2, R0, #0            // Inicializa contador
+    ADD R3, R0, #0x800        // Base de LEDs
+    ADD R5, R0, #0xF8         // Dirección de velocidad
+    ADD R12, R0, #4           // Configuración para retornos
+
+// Sistema de contraseña mejorado
+check_password:
+    LDR R9, [R0, #0x800]      // Lee switches
+    AND R7, R9, #0xF          // Máscara para switches
+    ADD R1, R0, #0xC          // Valor de contraseña
+    SUBS R8, R1, R7           // Compara
+    BEQ menu_start            // Si correcto, va al menú
+    
+    // Manejo de error de contraseña
+    ADD R3, R0, #0x40         // LED de error
+    STR R3, [R0, #0x800]      // Muestra error
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    STR R0, [R0, #0x800]      // Apaga LED
+    B start                   // Vuelve al inicio
+
+// Menú principal mejorado
+menu_start:
+    ADD R4, R0, #1            // Inicializa opción de menú
+    LDR R2, [R0, #0xF8]       // Carga velocidad
+
+menu_loop:
+    STR R4, [R0, #0x800]      // Muestra opción actual
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    
+    LDR R9, [R0, #0x800]      // Lee botones
+    ANDS R8, R9, #0x10        // Verifica botón
+    BEQ menu_next             // Si no presionado, siguiente
+    
+    // Selección de opción
+    SUBS R5, R4, #1           // Comprueba opción 1
+    BEQ auto_fantastic        // Auto Fantástico
+    SUBS R5, R4, #2           // Comprueba opción 2
+    BEQ pattern_choque        // Patrón de Choque
+    SUBS R5, R4, #4           // Comprueba opción 3
+    BEQ pattern_corazon       // Patrón Corazón
+    B menu_start              // Si no válido, reinicia menú
+
+menu_next:
+    ADD R4, R4, R4            // Siguiente opción
+    SUBS R8, R4, #32          // Límite de opciones
+    BEQ menu_start            // Si llegó al límite, reinicia
+    B menu_loop               // Siguiente iteración
+
+// Auto Fantástico mejorado
+auto_fantastic:
+    ADD R6, R0, #0x80         // Patrón inicial
+    ADD R7, R0, #8            // Contador
+
+auto_right:
+    STR R6, [R0, #0x800]      // Muestra patrón
+    ADD R14, R12, R15         // Guarda retorno
+    B check_reset             // Verifica reset
+    ADD R14, R12, R15         // Guarda retorno
+    B check_speed             // Verifica velocidad
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    
+    ADD R14, R12, R15         // Guarda retorno
+    B division                // Divide R6 por 2
+    SUBS R7, R7, #1           // Decrementa contador
+    BNE auto_right            // Si no terminó, continúa
+    
+    ADD R6, R0, #1            // Reinicia patrón
+    ADD R7, R0, #8            // Reinicia contador
+
+auto_left:
+    STR R6, [R0, #0x800]      // Muestra patrón
+    ADD R14, R12, R15         // Guarda retorno
+    B check_reset             // Verifica reset
+    ADD R14, R12, R15         // Guarda retorno
+    B check_speed             // Verifica velocidad
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    
+    ADD R6, R6, R6            // Multiplica por 2
+    SUBS R7, R7, #1           // Decrementa contador
+    BNE auto_left             // Si no terminó, continúa
+    B auto_fantastic          // Vuelve al inicio
+
+// Secuencias de LEDs
+
+// Patrón Corazón
+pattern_corazon:
+    // Activar LED en forma de corazón
+    ADD R6, R0, #0x80         // Posición inicial
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x40         // Posición siguiente
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x20         // Posición siguiente
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x10         // Posición siguiente
+    STR R6, [R0, #0x800]
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+
+// Patrón Choque
+pattern_choque:
+    // LED parpadeante para choque
+    ADD R6, R0, #0x40         // Posición inicial
+    STR R6, [R0, #0x800]
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    STR R0, [R0, #0x800]      // Apaga LED
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+    B pattern_choque          // Repite el patrón
+
+// Patrón Rayo Láser
+pattern_rayo_laser:
+    // Secuencia rápida de LEDs como rayo láser
+    ADD R6, R0, #0x10         // Posición inicial
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x20
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x40
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x80
+    STR R6, [R0, #0x800]
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+
+// Patrón Auto
+pattern_auto:
+    // LED parpadeante como simulación de un auto
+    ADD R6, R0, #0x80         // Posición inicial
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x40         // Posición siguiente
+    STR R6, [R0, #0x800]
+    ADD R6, R0, #0x20         // Posición siguiente
+    STR R6, [R0, #0x800]
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+
+// Control de velocidad mejorado con doble comprobación
+check_speed:
+    LDR R9, [R0, #0x800]      // Primera lectura de botones
+    ANDS R8, R9, #0x10        // Verifica botón
+    BEQ return_speed          // Si no presionado, retorna
+    
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera para anti-rebote
+    
+    LDR R9, [R0, #0x800]      // Segunda lectura de botones
+    ANDS R8, R9, #0x10        // Verifica si sigue presionado
+    BNE check_long_press      // Si sigue presionado, verifica presión larga
+    B main_menu               // Si fue presión corta, vuelve al menú
+    ADD R14, R12, R15         // Guarda retorno
+    B delay                   // Espera
+
+check_long_press:
+    ANDS R8, R9, #0x8         // Verifica dirección (arriba/abajo)
+    LDR R8, [R5, #0x80]       // Carga velocidad actual
+    BNE speed_up              // Si es 1, aumenta velocidad
+    
+speed_down:
+    SUBS R8, R8, #1           // Disminuye velocidad
+    BEQ return_speed          // Si llegó a 0, no reduce más
+    STR R8, [R5, #0x80]       // Guarda nueva velocidad
+    B return_speed
+    
+speed_up:
+    ADD R8, R8, #1            // Aumenta velocidad
+    STR R8, [R5, #0x80]       // Guarda nueva velocidad
+    
+return_speed:
+    ADD R15, R0, R14          // Retorna
+
+// Módulo de delay para anti-rebote
+delay:
+    LDR R8, [R5, #0x80]       // Carga valor de velocidad
+delay_loop:
+    SUBS R8, R8, #1           // Decrementa contador
+    BNE delay_loop            // Si no es cero, continúa
+    ADD R15, R0, R14          // Retorna
+
+// Rutina de división mejorada
+division:
+    SUBS R6, R6, #2           // Resta 2
+    ADD R7, R7, #1            // Incrementa contador
+    BNE division              // Si no es 0, continúa
+    ADD R6, R0, R7            // Resultado en R6
+    ADD R15, R0, R14          // Retorna
